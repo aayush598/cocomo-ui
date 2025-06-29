@@ -112,76 +112,182 @@ You are a software estimation expert with deep knowledge of COCOMO-II methodolog
 - Selected Features:
 {features_text}
 
-Generate parameters for these four endpoints with realistic values:
+**IMPORTANT: Use these exact parameter formats and valid values:**
 
-1. **Function Points (fp_items + language):**
-   - Analyze the features and determine appropriate Function Point items
-   - Use FP types: EI (External Input), EO (External Output), EQ (External Inquiry), ILF (Internal Logical File), EIF (External Interface File)
-   - Consider complexity levels: Simple (Low DET/FTR), Average (Medium), Complex (High DET/FTR)
-   - Choose appropriate programming language
-
-2. **Reuse Parameters:**
-   - Consider how much existing code might be reused/adapted
-   - Estimate modification percentages based on project type
-   - Set appropriate ratings for understanding and familiarity
-
-3. **REVL Parameters:**
-   - Consider requirements volatility based on project complexity
-   - Estimate new vs adapted code ratios
-
+1. **Function Points:** Use FP types: "EI", "EO", "EQ", "ILF", "EIF"
+2. **Reuse Parameters:** 
+   - asloc: integer (adapted source lines of code)
+   - dm, cm, im: integers 0-100 (percentage values)
+   - su_rating: "VL", "L", "N", "H", "VH" (Software Understanding)
+   - aa_rating: "1", "2", "3", "4", "5" (Assessment & Assimilation)  
+   - unfm_rating: "CF", "MF", "SF", "CFa", "MU" or "CU" (Unfamiliarity)
+   - at: integer 0-100 (Automatic Translation percentage)
+3. **REVL Parameters:** All integers (SLOC values)
 4. **Effort Parameters:**
-   - Consider final SLOC estimates
-   - Set schedule constraints based on project urgency
+   - sloc_ksloc: decimal (SLOC in thousands)
+   - sced_rating: "VL", "L", "N", "H", "VH" (Schedule rating)
 
-Respond with ONLY a valid JSON object with these exact keys:
-```json
+Generate realistic values based on complexity:
+- **Basic**: Small scale (1-5 KSLOC), more reuse, standard tech
+- **Intermediate**: Medium scale (5-20 KSLOC), moderate reuse
+- **Advanced**: Large scale (20+ KSLOC), less reuse, complex tech
+
+Respond with ONLY this JSON format:
 {{
   "function_points": {{
     "fp_items": [
-      {{"fp_type": "string", "det": number, "ftr_or_ret": number}},
-      // 3-6 items based on project complexity
+      {{"fp_type": "EI", "det": 15, "ftr_or_ret": 2}},
+      {{"fp_type": "EO", "det": 12, "ftr_or_ret": 3}},
+      {{"fp_type": "ILF", "det": 25, "ftr_or_ret": 4}}
     ],
-    "language": "string"
+    "language": "Java"
   }},
   "reuse": {{
-    "asloc": number,
-    "dm": number,
-    "cm": number, 
-    "im": number,
-    "su_rating": "string",
-    "aa_rating": "string",
-    "unfm_rating": "string",
-    "at": number
+    "asloc": 3000,
+    "dm": 10,
+    "cm": 15,
+    "im": 5,
+    "su_rating": "N",
+    "aa_rating": "2",
+    "unfm_rating": "SF",
+    "at": 10
   }},
   "revl": {{
-    "new_sloc": number,
-    "adapted_esloc": number,
-    "revl_percent": number
+    "new_sloc": 8000,
+    "adapted_esloc": 2000,
+    "revl_percent": 15
   }},
   "effort_schedule": {{
-    "sloc_ksloc": number,
-    "sced_rating": "string"
+    "sloc_ksloc": 10.0,
+    "sced_rating": "N"
   }}
 }}
-```
 
-Make the values realistic and consistent with each other. Consider:
-- Basic projects: Smaller scale, more reuse, standard technologies
-- Intermediate projects: Medium scale, moderate reuse, some new technologies  
-- Advanced projects: Large scale, less reuse, cutting-edge technologies
-
-Provide only the JSON, no explanations or markdown formatting.
+Use these exact value formats. No explanations, just the JSON.
 """
     
     raw = chat_with_llm(prompt)
     cleaned = strip_code_fences(raw)
     
     try:
-        return json.loads(cleaned)
+        params = json.loads(cleaned)
+        
+        # Validate and fix parameter formats
+        if 'reuse' in params:
+            reuse = params['reuse']
+            # Ensure ratings use correct format
+            if reuse.get('su_rating') not in ["VL", "L", "N", "H", "VH"]:
+                reuse['su_rating'] = "N"
+            if reuse.get('aa_rating') not in ["1", "2", "3", "4", "5"]:
+                reuse['aa_rating'] = "3"
+            if reuse.get('unfm_rating') not in ["SF", "F", "N", "U", "VU"]:
+                reuse['unfm_rating'] = "N"
+        
+        if 'effort_schedule' in params:
+            effort = params['effort_schedule']
+            if effort.get('sced_rating') not in ["VL", "L", "N", "H", "VH"]:
+                effort['sced_rating'] = "N"
+        
+        return params
+        
     except json.JSONDecodeError:
-        st.error("❌ Failed to parse COCOMO parameters JSON. Showing raw response for debugging.")
-        st.text_area("Raw LLM response", raw, height=200)
-        return {}
+        st.error("❌ Failed to parse COCOMO parameters JSON. Using fallback parameters.")
+        
+        # Provide fallback parameters based on complexity level
+        complexity_defaults = {
+            "basic": {
+                "function_points": {
+                    "fp_items": [
+                        {"fp_type": "EI", "det": 10, "ftr_or_ret": 2},
+                        {"fp_type": "EO", "det": 8, "ftr_or_ret": 2},
+                        {"fp_type": "ILF", "det": 15, "ftr_or_ret": 3}
+                    ],
+                    "language": "Python"
+                },
+                "reuse": {
+                    "asloc": 1000,
+                    "dm": 10,
+                    "cm": 15,
+                    "im": 5,
+                    "su_rating": "H",
+                    "aa_rating": "2",
+                    "unfm_rating": "F",
+                    "at": 10
+                },
+                "revl": {
+                    "new_sloc": 3000,
+                    "adapted_esloc": 1000,
+                    "revl_percent": 10
+                },
+                "effort_schedule": {
+                    "sloc_ksloc": 4.0,
+                    "sced_rating": "N"
+                }
+            },
+            "intermediate": {
+                "function_points": {
+                    "fp_items": [
+                        {"fp_type": "EI", "det": 15, "ftr_or_ret": 3},
+                        {"fp_type": "EO", "det": 12, "ftr_or_ret": 3},
+                        {"fp_type": "EQ", "det": 8, "ftr_or_ret": 2},
+                        {"fp_type": "ILF", "det": 25, "ftr_or_ret": 4}
+                    ],
+                    "language": "Java"
+                },
+                "reuse": {
+                    "asloc": 3000,
+                    "dm": 20,
+                    "cm": 25,
+                    "im": 15,
+                    "su_rating": "N",
+                    "aa_rating": "3",
+                    "unfm_rating": "N",
+                    "at": 5
+                },
+                "revl": {
+                    "new_sloc": 8000,
+                    "adapted_esloc": 3000,
+                    "revl_percent": 15
+                },
+                "effort_schedule": {
+                    "sloc_ksloc": 11.0,
+                    "sced_rating": "N"
+                }
+            },
+            "advanced": {
+                "function_points": {
+                    "fp_items": [
+                        {"fp_type": "EI", "det": 25, "ftr_or_ret": 4},
+                        {"fp_type": "EO", "det": 20, "ftr_or_ret": 4},
+                        {"fp_type": "EQ", "det": 15, "ftr_or_ret": 3},
+                        {"fp_type": "ILF", "det": 35, "ftr_or_ret": 5},
+                        {"fp_type": "EIF", "det": 18, "ftr_or_ret": 3}
+                    ],
+                    "language": "C++"
+                },
+                "reuse": {
+                    "asloc": 5000,
+                    "dm": 35,
+                    "cm": 40,
+                    "im": 25,
+                    "su_rating": "L",
+                    "aa_rating": "4",
+                    "unfm_rating": "U",
+                    "at": 0
+                },
+                "revl": {
+                    "new_sloc": 20000,
+                    "adapted_esloc": 5000,
+                    "revl_percent": 25
+                },
+                "effort_schedule": {
+                    "sloc_ksloc": 25.0,
+                    "sced_rating": "H"
+                }
+            }
+        }
+        
+        return complexity_defaults.get(level.lower(), complexity_defaults["intermediate"])
 
 # -------------------------------------------------
 # Generate comprehensive spec sheet
@@ -529,15 +635,28 @@ if software:
                     
                     st.markdown(spec_md, unsafe_allow_html=True)
                     
-                    # Download option
-                    st.download_button(
-                        label="📥 Download Specification as Markdown",
-                        data=spec_md,
-                        file_name=f"{software.replace(' ', '_')}_specification.md",
-                        mime="text/markdown"
-                    )
+                    # Download options
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            label="📥 Download Specification (MD)",
+                            data=spec_md,
+                            file_name=f"{software.replace(' ', '_')}_specification.md",
+                            mime="text/markdown"
+                        )
+                    with col2:
+                        # Also offer to download the parameters as JSON
+                        params_json = json.dumps(cocomo_params, indent=2)
+                        st.download_button(
+                            label="📊 Download Parameters (JSON)",
+                            data=params_json,
+                            file_name=f"{software.replace(' ', '_')}_cocomo_params.json",
+                            mime="application/json"
+                        )
                 else:
                     st.error("❌ Unable to generate specification due to API failures")
+        else:
+            st.info("👆 Please generate or input COCOMO-II parameters first to proceed with the analysis.")
 
 # Footer
 st.markdown("---")
