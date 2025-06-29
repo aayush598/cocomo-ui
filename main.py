@@ -95,6 +95,95 @@ def get_health_check():
 
 
 # -------------------------------------------------
+# Generate COCOMO-II parameters using LLM
+# -------------------------------------------------
+
+def generate_cocomo_parameters(software: str, level: str, features: list[str]) -> dict:
+    """Generate realistic COCOMO-II parameters based on project description and features"""
+    
+    features_text = "\n".join(f"- {feature}" for feature in features)
+    
+    prompt = f"""
+You are a software estimation expert with deep knowledge of COCOMO-II methodology. Based on the project description below, generate realistic and appropriate input parameters for all four COCOMO-II API endpoints.
+
+**Project Details:**
+- Software: {software}
+- Complexity Level: {level}
+- Selected Features:
+{features_text}
+
+Generate parameters for these four endpoints with realistic values:
+
+1. **Function Points (fp_items + language):**
+   - Analyze the features and determine appropriate Function Point items
+   - Use FP types: EI (External Input), EO (External Output), EQ (External Inquiry), ILF (Internal Logical File), EIF (External Interface File)
+   - Consider complexity levels: Simple (Low DET/FTR), Average (Medium), Complex (High DET/FTR)
+   - Choose appropriate programming language
+
+2. **Reuse Parameters:**
+   - Consider how much existing code might be reused/adapted
+   - Estimate modification percentages based on project type
+   - Set appropriate ratings for understanding and familiarity
+
+3. **REVL Parameters:**
+   - Consider requirements volatility based on project complexity
+   - Estimate new vs adapted code ratios
+
+4. **Effort Parameters:**
+   - Consider final SLOC estimates
+   - Set schedule constraints based on project urgency
+
+Respond with ONLY a valid JSON object with these exact keys:
+```json
+{{
+  "function_points": {{
+    "fp_items": [
+      {{"fp_type": "string", "det": number, "ftr_or_ret": number}},
+      // 3-6 items based on project complexity
+    ],
+    "language": "string"
+  }},
+  "reuse": {{
+    "asloc": number,
+    "dm": number,
+    "cm": number, 
+    "im": number,
+    "su_rating": "string",
+    "aa_rating": "string",
+    "unfm_rating": "string",
+    "at": number
+  }},
+  "revl": {{
+    "new_sloc": number,
+    "adapted_esloc": number,
+    "revl_percent": number
+  }},
+  "effort_schedule": {{
+    "sloc_ksloc": number,
+    "sced_rating": "string"
+  }}
+}}
+```
+
+Make the values realistic and consistent with each other. Consider:
+- Basic projects: Smaller scale, more reuse, standard technologies
+- Intermediate projects: Medium scale, moderate reuse, some new technologies  
+- Advanced projects: Large scale, less reuse, cutting-edge technologies
+
+Provide only the JSON, no explanations or markdown formatting.
+"""
+    
+    raw = chat_with_llm(prompt)
+    cleaned = strip_code_fences(raw)
+    
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        st.error("❌ Failed to parse COCOMO parameters JSON. Showing raw response for debugging.")
+        st.text_area("Raw LLM response", raw, height=200)
+        return {}
+
+# -------------------------------------------------
 # Generate comprehensive spec sheet
 # -------------------------------------------------
 
@@ -203,94 +292,135 @@ if software:
             selected_features = []
 
     if selected_features:
-        st.subheader("3️⃣ COCOMO-II Input Parameters")
+        st.subheader("3️⃣ COCOMO-II Parameter Generation")
         
-        # Create tabs for different input sections
-        tab1, tab2, tab3, tab4 = st.tabs(["📐 Function Points", "🔁 Reuse Parameters", "🧮 REVL Parameters", "🧠 Effort Parameters"])
+        # Option to auto-generate or manual input
+        param_mode = st.radio(
+            "Choose parameter input method:",
+            ("🤖 Auto-generate using AI", "✋ Manual input"),
+            horizontal=True,
+            help="AI generation analyzes your project to create realistic parameters automatically"
+        )
         
-        with tab1:
-            st.markdown("**Function Points to SLOC Conversion**")
+        if param_mode == "🤖 Auto-generate using AI":
+            # Auto-generation section
+            st.info("💡 AI will analyze your project description and features to generate appropriate COCOMO-II parameters")
             
-            # Dynamic function point items
-            num_fp_items = st.number_input("Number of Function Point Items", min_value=1, max_value=10, value=3)
+            if st.button("🎯 Generate Parameters with AI", type="secondary"):
+                with st.spinner("🧠 Analyzing project and generating COCOMO-II parameters..."):
+                    cocomo_params = generate_cocomo_parameters(software, level, selected_features)
+                
+                if cocomo_params:
+                    st.success("✅ Parameters generated successfully!")
+                    
+                    # Store in session state for later use
+                    st.session_state['cocomo_params'] = cocomo_params
+                    
+                    # Display generated parameters in expandable sections
+                    with st.expander("📐 Generated Function Points Parameters", expanded=True):
+                        fp_params = cocomo_params.get('function_points', {})
+                        st.json(fp_params)
+                    
+                    with st.expander("🔁 Generated Reuse Parameters"):
+                        reuse_params = cocomo_params.get('reuse', {})
+                        st.json(reuse_params)
+                    
+                    with st.expander("🧮 Generated REVL Parameters"):
+                        revl_params = cocomo_params.get('revl', {})
+                        st.json(revl_params)
+                    
+                    with st.expander("🧠 Generated Effort Parameters"):
+                        effort_params = cocomo_params.get('effort_schedule', {})
+                        st.json(effort_params)
+                else:
+                    st.error("❌ Failed to generate parameters. Please try manual input instead.")
+        
+        else:
+            # Manual input section (original code)
+            st.markdown("**Manual Parameter Input**")
             
-            fp_items = []
-            fp_types = ["EI", "EO", "EQ", "ILF", "EIF"]
+            # Create tabs for different input sections
+            tab1, tab2, tab3, tab4 = st.tabs(["📐 Function Points", "🔁 Reuse Parameters", "🧮 REVL Parameters", "🧠 Effort Parameters"])
             
-            for i in range(num_fp_items):
-                col_a, col_b, col_c = st.columns(3)
+            with tab1:
+                st.markdown("**Function Points to SLOC Conversion**")
+                
+                # Dynamic function point items
+                num_fp_items = st.number_input("Number of Function Point Items", min_value=1, max_value=10, value=3)
+                
+                fp_items = []
+                fp_types = ["EI", "EO", "EQ", "ILF", "EIF"]
+                
+                for i in range(num_fp_items):
+                    col_a, col_b, col_c = st.columns(3)
+                    with col_a:
+                        fp_type = st.selectbox(f"FP Type {i+1}", fp_types, key=f"fp_type_{i}")
+                    with col_b:
+                        det = st.number_input(f"DET {i+1}", min_value=1, max_value=100, value=10, key=f"det_{i}")
+                    with col_c:
+                        ftr_ret = st.number_input(f"FTR/RET {i+1}", min_value=1, max_value=50, value=2, key=f"ftr_{i}")
+                    
+                    fp_items.append({"fp_type": fp_type, "det": det, "ftr_or_ret": ftr_ret})
+                
+                language = st.selectbox("Programming Language", 
+                                      ["Java", "C++", "Python", "JavaScript", "C#", "PHP", "Ruby", "Go"], 
+                                      index=0)
+            
+            with tab2:
+                st.markdown("**Reuse/Adaptation Parameters**")
+                col_a, col_b = st.columns(2)
+                
                 with col_a:
-                    fp_type = st.selectbox(f"FP Type {i+1}", fp_types, key=f"fp_type_{i}")
+                    asloc = st.number_input("Adapted SLOC", min_value=0, value=3000, 
+                                          help="Lines of adapted/reused code")
+                    dm = st.slider("Design Modified (%)", 0, 100, 10, 
+                                 help="Percentage of design modification needed")
+                    cm = st.slider("Code Modified (%)", 0, 100, 15, 
+                                 help="Percentage of code modification needed")
+                    im = st.slider("Integration Modified (%)", 0, 100, 5, 
+                                 help="Percentage of integration effort needed")
+                
                 with col_b:
-                    det = st.number_input(f"DET {i+1}", min_value=1, max_value=100, value=10, key=f"det_{i}")
-                with col_c:
-                    ftr_ret = st.number_input(f"FTR/RET {i+1}", min_value=1, max_value=50, value=2, key=f"ftr_{i}")
+                    su_rating = st.selectbox("Software Understanding", ["VL", "L", "N", "H", "VH"], index=2)
+                    aa_rating = st.selectbox("Assessment & Assimilation", ["1", "2", "3", "4", "5"], index=1)
+                    unfm_rating = st.selectbox("Unfamiliarity", ["SF", "F", "N", "U", "VU"], index=0)
+                    at = st.slider("Automatic Translation (%)", 0, 100, 10)
+            
+            with tab3:
+                st.markdown("**REVL (Requirements Evolution) Parameters**")
+                col_a, col_b = st.columns(2)
                 
-                fp_items.append({"fp_type": fp_type, "det": det, "ftr_or_ret": ftr_ret})
-            
-            language = st.selectbox("Programming Language", 
-                                  ["Java", "C++", "Python", "JavaScript", "C#", "PHP", "Ruby", "Go"], 
-                                  index=0)
-        
-        with tab2:
-            st.markdown("**Reuse/Adaptation Parameters**")
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                asloc = st.number_input("Adapted SLOC", min_value=0, value=3000, 
-                                      help="Lines of adapted/reused code")
-                dm = st.slider("Design Modified (%)", 0, 100, 10, 
-                             help="Percentage of design modification needed")
-                cm = st.slider("Code Modified (%)", 0, 100, 15, 
-                             help="Percentage of code modification needed")
-                im = st.slider("Integration Modified (%)", 0, 100, 5, 
-                             help="Percentage of integration effort needed")
-            
-            with col_b:
-                su_rating = st.selectbox("Software Understanding", ["VL", "L", "N", "H", "VH"], index=2)
-                aa_rating = st.selectbox("Assessment & Assimilation", ["1", "2", "3", "4", "5"], index=1)
-                unfm_rating = st.selectbox("Unfamiliarity", ["SF", "F", "N", "U", "VU"], index=0)
-                at = st.slider("Automatic Translation (%)", 0, 100, 10)
-        
-        with tab3:
-            st.markdown("**REVL (Requirements Evolution) Parameters**")
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                new_sloc = st.number_input("New SLOC", min_value=0, value=5000,
-                                         help="Lines of new code to be developed")
-                adapted_esloc = st.number_input("Adapted ESLOC", min_value=0, value=3000,
-                                              help="Equivalent SLOC from reuse calculation")
-            
-            with col_b:
-                revl_percent = st.slider("REVL Percentage", 0, 50, 10,
-                                       help="Requirements volatility percentage")
-        
-        with tab4:
-            st.markdown("**Effort & Schedule Parameters**")
-            col_a, col_b = st.columns(2)
-            
-            with col_a:
-                sloc_ksloc = st.number_input("Total SLOC (in thousands)", min_value=0.1, value=8.8, step=0.1,
-                                           help="Total SLOC after REVL adjustment (in KSLOC)")
-            
-            with col_b:
-                sced_rating = st.selectbox("Schedule Constraint", 
-                                         ["VL", "L", "N", "H", "VH"], 
-                                         index=2,
-                                         help="Schedule pressure rating")
-        
-        # Execute API calls and generate spec
-        if st.button("🚀 Generate Complete Analysis", type="primary", use_container_width=True):
-            with st.spinner("Processing COCOMO-II calculations and generating specification..."):
+                with col_a:
+                    new_sloc = st.number_input("New SLOC", min_value=0, value=5000,
+                                             help="Lines of new code to be developed")
+                    adapted_esloc = st.number_input("Adapted ESLOC", min_value=0, value=3000,
+                                                  help="Equivalent SLOC from reuse calculation")
                 
-                # Prepare payloads
-                fp_payload = {
+                with col_b:
+                    revl_percent = st.slider("REVL Percentage", 0, 50, 10,
+                                           help="Requirements volatility percentage")
+            
+            with tab4:
+                st.markdown("**Effort & Schedule Parameters**")
+                col_a, col_b = st.columns(2)
+                
+                with col_a:
+                    sloc_ksloc = st.number_input("Total SLOC (in thousands)", min_value=0.1, value=8.8, step=0.1,
+                                               help="Total SLOC after REVL adjustment (in KSLOC)")
+                
+                with col_b:
+                    sced_rating = st.selectbox("Schedule Constraint", 
+                                             ["VL", "L", "N", "H", "VH"], 
+                                             index=2,
+                                             help="Schedule pressure rating")
+            
+            # Store manual parameters in session state
+            manual_params = {
+                "function_points": {
                     "fp_items": fp_items,
                     "language": language
-                }
-                
-                reuse_payload = {
+                },
+                "reuse": {
                     "asloc": asloc,
                     "dm": dm,
                     "cm": cm,
@@ -299,18 +429,49 @@ if software:
                     "aa_rating": aa_rating,
                     "unfm_rating": unfm_rating,
                     "at": at
-                }
-                
-                revl_payload = {
+                },
+                "revl": {
                     "new_sloc": new_sloc,
                     "adapted_esloc": adapted_esloc,
                     "revl_percent": revl_percent
-                }
-                
-                effort_payload = {
+                },
+                "effort_schedule": {
                     "sloc_ksloc": sloc_ksloc,
                     "sced_rating": sced_rating
                 }
+            }
+            st.session_state['cocomo_params'] = manual_params
+        
+        # Execute API calls and generate spec (only show if parameters are available)
+        if 'cocomo_params' in st.session_state and st.session_state['cocomo_params']:
+            st.subheader("4️⃣ Generate Analysis")
+            if st.button("🚀 Run COCOMO-II Analysis & Generate Specification", type="primary", use_container_width=True):
+                with st.spinner("Processing COCOMO-II calculations and generating specification..."):
+                    
+                    # Get parameters from session state
+                    cocomo_params = st.session_state['cocomo_params']
+                    
+                    # Prepare payloads from stored parameters
+                    fp_payload = cocomo_params.get('function_points', {})
+                    reuse_payload = cocomo_params.get('reuse', {})
+                    revl_payload = cocomo_params.get('revl', {})
+                    effort_payload = cocomo_params.get('effort_schedule', {})
+                    
+                    # Display the parameters being used
+                    with st.expander("📋 Parameters Being Used", expanded=False):
+                        col1, col2, col3, col4 = st.columns(4)
+                        with col1:
+                            st.markdown("**Function Points**")
+                            st.json(fp_payload)
+                        with col2:
+                            st.markdown("**Reuse**")
+                            st.json(reuse_payload)
+                        with col3:
+                            st.markdown("**REVL**")
+                            st.json(revl_payload)
+                        with col4:
+                            st.markdown("**Effort**")
+                            st.json(effort_payload)
                 
                 # Execute API calls
                 st.subheader("📊 COCOMO-II Estimation Results")
