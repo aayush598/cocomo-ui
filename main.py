@@ -7,6 +7,7 @@ from groq import Groq
 
 from utils.cocomo_generator import generate_feature_sets, generate_cocomo_parameters
 from utils.spec_generator import build_comprehensive_spec_sheet
+from utils.generate_directory_structure import generate_directory_structure
 
 from api.cocomo_api import post_json, get_health_check
 
@@ -228,16 +229,57 @@ if software:
                         file_name=f"{software.replace(' ', '_')}_cocomo_params.json",
                         mime="application/json"
                     )
+                
+                # Download & Structure Options
+                st.markdown("### 🗂️ Directory Structure Generator")
+                if st.button("📁 Generate Suggested Project Structure"):
+                    with st.spinner("📁 Generating directory structure..."):
+                        tech_stack = api_results.get("function_points", {}).get("language", "Python")
+                        dir_result = generate_directory_structure(
+                            project_desc=software,
+                            tech_stack=[tech_stack],
+                            preferences="\n".join(selected_features)
+                        )
+
+                    if dir_result:
+                        tree_view = dir_result.get("tree_view", "")
+                        json_structure = dir_result.get("json_structure", {})
+
+                        st.success("✅ Directory structure generated!")
+                        st.markdown("**📂 Tree View:**")
+                        st.code(tree_view, language="bash")
+
+                        with st.expander("📦 Raw JSON Structure"):
+                            st.json(json_structure)
+
+                        st.download_button(
+                            label="📥 Download JSON Structure",
+                            data=json.dumps(json_structure, indent=2),
+                            file_name=f"{software.replace(' ', '_')}_directory_structure.json",
+                            mime="application/json"
+                        )
+                    else:
+                        st.error("❌ Could not generate directory structure.")
+
+                # Download buttons
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.download_button(
+                        label="📥 Download Specification (MD)",
+                        data=spec_md,
+                        file_name=f"{software.replace(' ', '_')}_specification.md",
+                        mime="text/markdown",
+                        key="md"
+                    )
+                with col2:  
+                    params_json = json.dumps(cocomo_params, indent=2)
+                    st.download_button(
+                        label="📊 Download Parameters (JSON)",
+                        data=params_json,
+                        file_name=f"{software.replace(' ', '_')}_cocomo_params.json",
+                        mime="application/json",
+                        key="param"
+                    )
+
             else:
                 st.error("❌ Unable to generate specification due to API failures")
-        # else:
-        #     st.info("👆 Please generate or input COCOMO-II parameters first to proceed with the analysis.")
-
-# Footer
-st.markdown("---")
-st.markdown("""
-<div style='text-align: center; color: #666;'>
-    Built with ❤️ using Streamlit, Groq Llama-3, and COCOMO-II API<br>
-    📊 Comprehensive Project Planning & Effort Estimation Tool
-</div>
-""", unsafe_allow_html=True)
