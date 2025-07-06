@@ -3,23 +3,48 @@ import streamlit as st
 from utils.groq_client import chat_with_llm, strip_code_fences
 
 
-def generate_feature_sets(software: str) -> dict:
-    """Generate basic, intermediate, and advanced features using LLM."""
-    system_prompt = (
-        "You are a senior software architect. For the given software idea, propose concise but descriptive "
-        "feature lists for three tiers of project maturity: Basic, Intermediate, and Advanced. "
-        "Each tier should build upon the previous one. Respond **only** "
-        "in valid JSON with keys 'basic', 'intermediate', 'advanced'. The value for each key must be an array "
-        "of feature strings. Basic should have 4-6 features, Intermediate 6-8 features, Advanced 8-12 features."
+# Updated generate_feature_sets to accept suggested_features_text
+def generate_feature_sets(software: str, suggested_features_text: str) -> dict:
+    """
+    Classify suggested features into basic, intermediate, and advanced tiers using LLM.
+    
+    Args:
+        software (str): The project idea (used for context in the prompt).
+        suggested_features_text (str): A string containing the suggested features from the ideation API.
+        
+    Returns:
+        dict: A dictionary with 'basic', 'intermediate', and 'advanced' keys,
+              each containing a list of classified feature strings.
+    """
+    prompt = (
+        f"You are a senior software architect. Given the following suggested features for a '{software}' project, "
+        "classify them into three categories: 'basic', 'intermediate', and 'advanced'. "
+        "Each tier should build upon the previous one. "
+        "Basic features should cover core functionality, intermediate features should enhance the core, "
+        "and advanced features should represent enterprise-level or highly innovative additions.\n\n"
+        "Respond **only** in valid JSON with keys 'basic', 'intermediate', and 'advanced'. "
+        "The value for each key must be an array of feature strings. "
+        "Aim for 4-6 features in 'basic', 6-8 in 'intermediate', and 8-12 in 'advanced'.\n\n"
+        "Suggested Features:\n"
+        f"{suggested_features_text}\n\n"
+        "Example Output:\n"
+        "```json\n"
+        "{\n"
+        "  \"basic\": [\"User Authentication\", \"Basic Data Storage\"],\n"
+        "  \"intermediate\": [\"Real-time Chat\", \"File Uploads\"],\n"
+        "  \"advanced\": [\"AI-powered Analytics\", \"Microservices Architecture\"]\n"
+        "}\n"
+        "```"
     )
-    raw = chat_with_llm(f"{system_prompt}\n\nSoftware Idea: {software}")
+    
+    raw = chat_with_llm(prompt)
     cleaned = strip_code_fences(raw)
 
     try:
         return json.loads(cleaned)
     except json.JSONDecodeError:
-        st.error("❌ LLM response was not valid JSON. Showing raw text below for debugging.")
-        st.text_area("LLM raw response", raw, height=200)
+        st.error("❌ LLM response for feature classification was not valid JSON. Showing raw text below for debugging.")
+        st.text_area("LLM raw response (Feature Classification)", raw, height=200)
         return {"basic": [], "intermediate": [], "advanced": []}
 
 def generate_cocomo_parameters(software: str, level: str, features: list[str]) -> dict:
