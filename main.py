@@ -20,7 +20,7 @@ load_dotenv()
 # Configuration
 # -------------------------------------------------
 COCOMO_API_BASE = "https://cocomo2-python.onrender.com"  # COCOMO API base
-GITHUB_EXTRACTOR_API_URL = "http://127.0.0.1:8000/" # GitHub Extractor API base
+GITHUB_EXTRACTOR_API_URL = "https://github-project-extractor.onrender.com" # GitHub Extractor API base
 
 groq_api_key = os.getenv("GROQ_API_KEY", "")
 if not groq_api_key:
