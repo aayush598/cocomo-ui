@@ -2,13 +2,15 @@ import streamlit as st
 from utils.suggest_features import suggest_features_and_stack
 from utils.classify_features import classify_features_by_level
 from utils.generate_cocomo_params import generate_cocomo2_parameters
+from utils.evaluate_cocomo_effort import evaluate_cocomo_effort
+
 
 
 st.set_page_config(page_title="AI Project Assistant", layout="wide")
 st.title("AI Project Assistant")
 
 # --------- Step 1: User Input ----------
-project_idea = st.text_input("Enter your project idea", "video calling")
+project_idea = st.text_input("Enter your project idea", "chatbot")
 
 if "suggestions" not in st.session_state:
     st.session_state.suggestions = None
@@ -73,6 +75,7 @@ if st.session_state.classified and "selected_category" in st.session_state:
                 level=selected_level,
                 features=selected_features
             )
+            st.session_state["cocomo_params"] = cocomo_data
 
             if "error" in cocomo_data:
                 st.error(f"Failed to fetch COCOMO II parameters: {cocomo_data['error']}")
@@ -93,6 +96,30 @@ if st.session_state.classified and "selected_category" in st.session_state:
 
                 st.subheader("🕒 Effort & Schedule")
                 st.json(cocomo_data["effort_schedule"])
+
+# ✅ Evaluate COCOMO II Effort (next step only if params exist)
+if "cocomo_params" in st.session_state:
+    st.subheader("📉 Step 4: Evaluate COCOMO II Effort")
+
+    if st.button("Evaluate COCOMO II Effort / Schedule"):
+        with st.spinner("Evaluating effort and schedule..."):
+            eval_result = evaluate_cocomo_effort(st.session_state["cocomo_params"])
+
+        if "error" in eval_result:
+            st.error(f"❌ Evaluation failed: {eval_result['error']}")
+        else:
+            st.success("🎉 COCOMO II Effort Evaluation Complete")
+            results = eval_result["results"]
+
+            st.subheader("📊 Function Points & SLOC")
+            st.json(results["function_points"])
+
+            st.subheader("🔁 REVL (Reused & Adapted Code)")
+            st.json(results["revl"])
+
+            st.subheader("🕒 Effort & Schedule Estimation")
+            st.json(results["effort_schedule"])
+
 
 # -------- Optional Debug --------
 with st.sidebar.expander("🔧 Session State"):
