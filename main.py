@@ -1,6 +1,8 @@
 import streamlit as st
 from utils.suggest_features import suggest_features_and_stack
 from utils.classify_features import classify_features_by_level
+from utils.generate_cocomo_params import generate_cocomo2_parameters
+
 
 st.set_page_config(page_title="AI Project Assistant", layout="wide")
 st.title("AI Project Assistant")
@@ -58,6 +60,39 @@ if st.session_state.classified:
     )
 
     st.success(f"✅ You selected **{st.session_state['selected_category'].capitalize()}** features.")
+
+# ✅ Generate COCOMO II Parameters
+if st.session_state.classified and "selected_category" in st.session_state:
+    selected_level = st.session_state["selected_category"]
+    selected_features = st.session_state.classified[selected_level]
+
+    if st.button("Generate COCOMO II Parameters"):
+        with st.spinner("Analyzing software project using COCOMO II..."):
+            cocomo_data = generate_cocomo2_parameters(
+                software=project_idea,
+                level=selected_level,
+                features=selected_features
+            )
+
+            if "error" in cocomo_data:
+                st.error(f"Failed to fetch COCOMO II parameters: {cocomo_data['error']}")
+            else:
+                st.success("✅ COCOMO II Parameters Generated")
+
+                st.subheader("📦 Function Points")
+                for item in cocomo_data["function_points"]["fp_items"]:
+                    st.json(item)
+
+                st.markdown(f"**Language:** {cocomo_data['function_points']['language']}")
+
+                st.subheader("🔁 Reuse")
+                st.json(cocomo_data["reuse"])
+
+                st.subheader("🧠 Re-Engineering Level")
+                st.json(cocomo_data["revl"])
+
+                st.subheader("🕒 Effort & Schedule")
+                st.json(cocomo_data["effort_schedule"])
 
 # -------- Optional Debug --------
 with st.sidebar.expander("🔧 Session State"):
