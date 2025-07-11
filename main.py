@@ -3,6 +3,7 @@ from utils.suggest_features import suggest_features_and_stack
 from utils.classify_features import classify_features_by_level
 from utils.generate_cocomo_params import generate_cocomo2_parameters
 from utils.evaluate_cocomo_effort import evaluate_cocomo_effort
+from utils.folder_structure_generator import generate_folder_structure
 
 
 
@@ -120,6 +121,29 @@ if "cocomo_params" in st.session_state:
             st.subheader("🕒 Effort & Schedule Estimation")
             st.json(results["effort_schedule"])
 
+# ✅ Generate Folder Structure
+if st.session_state.classified and "selected_category" in st.session_state:
+    selected_level = st.session_state["selected_category"]
+    selected_features = st.session_state.classified[selected_level]
+
+    if st.button("Generate Folder Structure"):
+        with st.spinner("Generating folder structure based on your selected features..."):
+            folder_data = generate_folder_structure(
+                project_idea=project_idea,
+                user_selected_features=selected_features,
+                suggested_tech_stack=st.session_state.suggestions["suggested_tech_stack"],
+                total_repos_processed=st.session_state.suggestions.get("total_repos_processed", 3)
+            )
+
+        if "error" in folder_data:
+            st.error(f"❌ Failed to generate folder structure: {folder_data['error']}")
+        else:
+            st.success("✅ Folder Structure Generated")
+            st.subheader("📁 Folder Structure (JSON)")
+            st.json(folder_data["folder_structure"]["json_structure"])
+
+            st.subheader("📂 Tree View")
+            st.code(folder_data["folder_structure"]["tree_view"], language="text")
 
 # -------- Optional Debug --------
 with st.sidebar.expander("🔧 Session State"):
