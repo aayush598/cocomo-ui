@@ -4,8 +4,7 @@ from utils.classify_features import classify_features_by_level
 from utils.generate_cocomo_params import generate_cocomo2_parameters
 from utils.evaluate_cocomo_effort import evaluate_cocomo_effort
 from utils.folder_structure_generator import generate_folder_structure
-
-
+from utils.generate_specsheet import generate_specification_sheet, display_specification_sheet, validate_cocomo_params, format_features_for_display, extract_key_metrics
 
 st.set_page_config(page_title="AI Project Assistant", layout="wide")
 st.title("AI Project Assistant")
@@ -43,7 +42,7 @@ if st.session_state.suggestions:
     st.subheader("🔹 Suggested Features (raw)")
     st.markdown(st.session_state.suggestions["suggested_features"], unsafe_allow_html=True)
 
-    st.subheader("🔹 Suggested Tech Stack")
+    st.subheader("🔹 Suggested Tech Stack")
     st.code(st.session_state.suggestions["suggested_tech_stack"], language="text")
 
 if st.session_state.classified:
@@ -54,7 +53,7 @@ if st.session_state.classified:
             st.markdown(f"#### {level.capitalize()}")
             st.write("\n".join(f"• {feat}" for feat in st.session_state.classified[level]))
 
-    # Selection persists here and doesn’t trigger a reset
+    # Selection persists here and doesn't trigger a reset
     st.radio(
         "Select the level you want to work on:",
         options=["basic", "intermediate", "advanced"],
@@ -105,6 +104,7 @@ if "cocomo_params" in st.session_state:
     if st.button("Evaluate COCOMO II Effort / Schedule"):
         with st.spinner("Evaluating effort and schedule..."):
             eval_result = evaluate_cocomo_effort(st.session_state["cocomo_params"])
+            st.session_state["eval_result"] = eval_result
 
         if "error" in eval_result:
             st.error(f"❌ Evaluation failed: {eval_result['error']}")
@@ -120,6 +120,59 @@ if "cocomo_params" in st.session_state:
 
             st.subheader("🕒 Effort & Schedule Estimation")
             st.json(results["effort_schedule"])
+
+# ✅ Generate Specification Sheet
+if "cocomo_params" in st.session_state and st.session_state.classified and "selected_category" in st.session_state:
+    st.subheader("📄 Step 5: Generate Specification Sheet")
+    
+    selected_level = st.session_state["selected_category"]
+    selected_features = st.session_state.classified[selected_level]
+    
+    # Display current project details
+    with st.expander("📋 Current Project Details"):
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(f"**Project:** {project_idea}")
+            st.markdown(f"**Level:** {selected_level.capitalize()}")
+        with col2:
+            st.markdown("**Selected Features:**")
+            st.markdown(format_features_for_display(selected_features))
+    
+    if st.button("Generate Specification Sheet"):
+        # Validate COCOMO parameters before making API call
+        is_valid, error_msg = validate_cocomo_params(st.session_state["cocomo_params"])
+        
+        if not is_valid:
+            st.error(f"❌ Invalid COCOMO parameters: {error_msg}")
+            st.info("Please regenerate COCOMO II parameters before creating the specification sheet.")
+        else:
+            with st.spinner("Generating specification sheet..."):
+                specsheet_result = generate_specification_sheet(
+                    project_idea=project_idea,
+                    selected_level=selected_level,
+                    selected_features=selected_features,
+                    cocomo_params=st.session_state["eval_result"]
+                )
+                
+                if specsheet_result["success"]:
+                    st.success("✅ Specification Sheet Generated Successfully!")
+                    st.session_state["specsheet"] = specsheet_result["specsheet"]
+                                       
+                    # Display the specification sheet
+                    display_specification_sheet(specsheet_result["specsheet"])
+                    
+                else:
+                    st.error(f"❌ Failed to generate specification sheet: {specsheet_result['error']}")
+                    
+                    # Show troubleshooting tips
+                    with st.expander("🔧 Troubleshooting Tips"):
+                        st.markdown("""
+                        **Common solutions:**
+                        1. Check your internet connection
+                        2. Try again after a few minutes (server might be busy)
+                        3. Regenerate COCOMO II parameters if they seem incomplete
+                        4. Contact support if the problem persists
+                        """)
 
 # ✅ Generate Folder Structure
 if st.session_state.classified and "selected_category" in st.session_state:
