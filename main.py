@@ -5,6 +5,7 @@ from utils.generate_cocomo_params import generate_cocomo2_parameters
 from utils.evaluate_cocomo_effort import evaluate_cocomo_effort
 from utils.folder_structure_generator import generate_folder_structure
 from utils.generate_specsheet import generate_specification_sheet, display_specification_sheet, validate_cocomo_params, format_features_for_display, extract_key_metrics
+from utils.github_upload import upload_to_github, validate_folder_structure, display_upload_status, get_project_summary
 
 st.set_page_config(page_title="AI Project Assistant", layout="wide")
 st.title("AI Project Assistant")
@@ -192,11 +193,82 @@ if st.session_state.classified and "selected_category" in st.session_state:
             st.error(f"❌ Failed to generate folder structure: {folder_data['error']}")
         else:
             st.success("✅ Folder Structure Generated")
+            st.session_state["folder_structure"] = folder_data["folder_structure"]["json_structure"]
+            
             st.subheader("📁 Folder Structure (JSON)")
             st.json(folder_data["folder_structure"]["json_structure"])
 
             st.subheader("📂 Tree View")
             st.code(folder_data["folder_structure"]["tree_view"], language="text")
+
+# ✅ Upload to GitHub
+if "folder_structure" in st.session_state:
+    st.subheader("🚀 Step 6: Upload to GitHub")
+    
+    # Display project summary before upload
+    project_summary = get_project_summary(st.session_state["folder_structure"])
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📁 Project Name", project_summary["name"])
+    with col2:
+        st.metric("📄 Files", project_summary["files"])
+    with col3:
+        st.metric("🗂️ Folders", project_summary["folders"])
+    
+    # Option to customize repository name
+    repo_name = st.text_input(
+        "Repository Name (optional)", 
+        value=project_idea,
+        help="Leave empty to use the project idea as repository name"
+    )
+    
+    # Use project_idea if repo_name is empty
+    final_repo_name = repo_name.strip() if repo_name.strip() else project_idea
+    
+    # Validate folder structure before showing upload button
+    is_valid, validation_error = validate_folder_structure(st.session_state["folder_structure"])
+    
+    if not is_valid:
+        st.error(f"❌ Invalid folder structure: {validation_error}")
+        st.info("Please regenerate the folder structure before uploading to GitHub.")
+    else:
+        # Show upload button
+        if st.button("🚀 Upload to GitHub", type="primary"):
+            with st.spinner("Uploading project to GitHub... This may take a few minutes."):
+                upload_result = upload_to_github(
+                    project_name=final_repo_name,
+                    folder_structure=st.session_state["folder_structure"]
+                )
+                
+                # Store upload result in session state
+                st.session_state["upload_result"] = upload_result
+                
+                # Display upload status
+                display_upload_status(upload_result)
+        
+        # Show upload requirements
+        with st.expander("ℹ️ GitHub Upload Requirements"):
+            st.markdown("""
+            **Requirements for GitHub upload:**
+            1. **Server Configuration**: The server must have valid GitHub credentials configured
+            2. **Repository Name**: Must be unique in your GitHub account
+            3. **Internet Connection**: Stable connection required for upload
+            4. **Valid Structure**: Project must have a valid folder structure
+            
+            **What happens during upload:**
+            - Creates a new repository in your GitHub account
+            - Uploads all files and folders according to your project structure
+            - Initializes the repository with basic files (README, .gitignore, etc.)
+            - Sets up the complete project structure as generated
+            
+            **Note**: The upload process may take 1-2 minutes depending on project size.
+            """)
+
+# Display previous upload result if available
+if "upload_result" in st.session_state:
+    st.subheader("📋 Last Upload Status")
+    display_upload_status(st.session_state["upload_result"])
 
 # -------- Optional Debug --------
 with st.sidebar.expander("🔧 Session State"):
